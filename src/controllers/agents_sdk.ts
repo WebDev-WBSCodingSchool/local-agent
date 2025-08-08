@@ -10,7 +10,7 @@ import {
 } from '@openai/agents';
 import { z } from 'zod';
 import { weatherResponseSchema } from '#schemas';
-import { getWeather } from '#utils';
+import { getWeather, returnError } from '#utils';
 
 export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherInputDTO> = async (
   req,
@@ -29,8 +29,7 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
     name: 'return_error',
     description: 'Return an error when the user asks something that is NOT about the weather.',
     parameters: z.object({ message: z.string() }),
-    execute: ({ message }) =>
-      ({ success: false, weatherData: null, error: message } satisfies WeatherResponseDTO)
+    execute: returnError
   });
   // Step 2: Create OpenAI client, during development we use LM Studio's base URL
   const client = new OpenAI({
