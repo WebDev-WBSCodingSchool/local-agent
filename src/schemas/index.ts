@@ -17,7 +17,6 @@ export const weatherResponseSchema = z.object({
         remark: z.string()
       })
     )
-    .optional()
     .nullable(),
-  error: z.string().optional().nullable()
+  error: z.string().nullable()
 });

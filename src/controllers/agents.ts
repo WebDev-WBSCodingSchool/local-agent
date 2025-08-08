@@ -7,6 +7,7 @@ import { weatherPromptSchema, weatherResponseSchema, weatherSchema } from '#sche
 import { getWeather } from '#utils';
 
 type WeatherInputDTO = z.infer<typeof weatherPromptSchema>;
+type WeatherResponseDTO = z.infer<typeof weatherResponseSchema>;
 type Weather = z.infer<typeof weatherSchema>;
 
 // Step 1: Define a list of callable tools for the model
@@ -28,7 +29,10 @@ const tools: ChatCompletionTool[] = [
   }
 ];
 
-export const getCurrentWeather: RequestHandler<{}, {}, WeatherInputDTO, {}> = async (req, res) => {
+export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherInputDTO> = async (
+  req,
+  res
+) => {
   const { prompt } = req.body;
   // Step 2: Create OpenAI client, during development we use LM Studio's base URL
   const client = new OpenAI({
@@ -40,7 +44,7 @@ export const getCurrentWeather: RequestHandler<{}, {}, WeatherInputDTO, {}> = as
   const messages: ChatCompletionMessageParam[] = [
     {
       role: 'developer',
-      content: `You are a strict weather assistant. Only respond to messages about weather. If the user asks about the weather in a city, call the "get_weather" tool. For anything else, do not call any tool and reply with "I can only provide weather information."`
+      content: `You are a strict weather assistant. Only respond to messages about weather. If the user asks about the weather in a city, call the "get_weather" tool. Use the "remark" field in the output for any tips or insight based on the conditions and temperature For anything else, do not call any tool and reply with "I can only provide weather information."`
     },
     {
       role: 'user',
@@ -54,19 +58,25 @@ export const getCurrentWeather: RequestHandler<{}, {}, WeatherInputDTO, {}> = as
     messages,
     tool_choice: 'auto'
   });
+  console.log(
+    `\x1b[34mFirst call to determine function calling is used model: ${completion.model}\x1b[0m`
+  );
   // Step 6: Check if the model returned a valid response
   const assistantMessage = completion.choices[0]?.message;
   if (!assistantMessage) {
-    res.status(500).json({ success: false, error: 'Something went wrong' });
+    res.status(500).json({ success: false, weatherData: null, error: 'Something went wrong' });
     return;
   }
   // Step 7: Add the assistant's message to the running message list
   messages.push(assistantMessage);
   // Step 8: Check if the assistant message contains a tool call
   let toolCall = assistantMessage.tool_calls?.[0];
-  if (toolCall && toolCall.function) {
+  if (toolCall && toolCall.type === 'function') {
     const functionName = toolCall.function.name;
     const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+    console.log(
+      `\x1b[35mFunction ${functionName} will be called with: ${JSON.stringify(functionArgs)}\x1b[0m`
+    );
     let result: Weather | undefined;
     // Step 9: Call your local function
     if (functionName === 'get_weather') {
@@ -78,6 +88,14 @@ export const getCurrentWeather: RequestHandler<{}, {}, WeatherInputDTO, {}> = as
       tool_call_id: toolCall.id,
       content: JSON.stringify(result)
     });
+  } else {
+    console.log(`\x1b[31mModel didn't return a valid function call, returning early\x1b[0m`);
+    res.status(500).json({
+      success: false,
+      weatherData: null,
+      error: 'Could not get reliable weather information'
+    });
+    return;
   }
   // Step 11: Finalize the response with the model
   const finalCompletion = await client.chat.completions.create({
@@ -85,12 +103,43 @@ export const getCurrentWeather: RequestHandler<{}, {}, WeatherInputDTO, {}> = as
     messages,
     response_format: {
       type: 'json_schema',
-      json_schema: zodTextFormat(weatherResponseSchema, 'weatherResponse')
+      json_schema: {
+        name: 'WeatherResponse',
+        description: 'Response containing weather data for a specific location.',
+        schema: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            weatherData: {
+              type: 'object',
+              description:
+                'Weather data for the requested location. If error occurs, this will be null.',
+              properties: {
+                temperature: { type: 'number' },
+                condition: { type: 'string' },
+                remark: { type: 'string' }
+              },
+              required: ['temperature', 'condition', 'remark'],
+              nullable: true
+            },
+            error: {
+              type: 'string',
+              description:
+                'Error message if something went wrong. If weather data is available, this should be null.',
+              nullable: true
+            }
+          },
+          required: ['success', 'weatherData']
+        }
+      }
     }
   });
+  console.log(
+    `\x1b[34mSecond call to put final response together used model: ${finalCompletion.model}\x1b[0m`
+  );
   const finalAssistantMessage = finalCompletion.choices[0]?.message;
   if (!finalAssistantMessage) {
-    res.status(500).json({ success: false, error: 'Something went wrong' });
+    res.status(500).json({ success: false, weatherData: null, error: 'Something went wrong' });
     return;
   }
   const finalResponse = JSON.parse(finalAssistantMessage.content || '{}');

@@ -11,7 +11,7 @@ app.use('*splat', notFoundHandler);
 app.use(errorHandler);
 
 const server = app.listen(port, () =>
-  console.log(`\x1b[35mExample app listening at http://localhost:${port}\x1b[0m`)
+  console.log(`\x1b[35mAgent endpoints are listening at http://localhost:${port}\x1b[0m`)
 );
 
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
