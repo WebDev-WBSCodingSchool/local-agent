@@ -103,35 +103,7 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
     messages,
     response_format: {
       type: 'json_schema',
-      json_schema: {
-        name: 'WeatherResponse',
-        description: 'Response containing weather data for a specific location.',
-        schema: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            weatherData: {
-              type: 'object',
-              description:
-                'Weather data for the requested location. If error occurs, this will be null.',
-              properties: {
-                temperature: { type: 'number' },
-                condition: { type: 'string' },
-                remark: { type: 'string' }
-              },
-              required: ['temperature', 'condition', 'remark'],
-              nullable: true
-            },
-            error: {
-              type: 'string',
-              description:
-                'Error message if something went wrong. If weather data is available, this should be null.',
-              nullable: true
-            }
-          },
-          required: ['success', 'weatherData']
-        }
-      }
+      json_schema: zodTextFormat(weatherResponseSchema, 'WeatherResponse')
     }
   });
   console.log(
