@@ -1,50 +1,71 @@
+import type { Weather, WeatherInputDTO, WeatherResponseDTO } from '#types';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources';
 import { type RequestHandler } from 'express';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
-import { z } from 'zod';
-import { weatherPromptSchema, weatherResponseSchema, weatherSchema } from '#schemas';
-import { getWeather } from '#utils';
-
-type WeatherInputDTO = z.infer<typeof weatherPromptSchema>;
-type WeatherResponseDTO = z.infer<typeof weatherResponseSchema>;
-type Weather = z.infer<typeof weatherSchema>;
-
-// Step 1: Define a list of callable tools for the model
-const tools: ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_weather',
-      description: 'Get current temperature for a given location.',
-      parameters: {
-        type: 'object',
-        properties: {
-          city: { type: 'string' }
-        },
-        required: ['city'],
-        additionalProperties: false
-      }
-    }
-  }
-];
+import { weatherResponseSchema } from '#schemas';
+import { getWeather, returnError } from '#utils';
 
 export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherInputDTO> = async (
   req,
   res
 ) => {
   const { prompt } = req.body;
-  // Step 2: Create OpenAI client, during development we use LM Studio's base URL
+  // Step 1: Define a list of callable tools for the model
+  const tools: ChatCompletionTool[] = [
+    {
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        description: 'Get current temperature for a given location.',
+        parameters: {
+          type: 'object',
+          properties: {
+            city: { type: 'string' }
+          },
+          required: ['city'],
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'return_error',
+        description: 'Return an error when the user asks something that is NOT about the weather.',
+        parameters: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' }
+          },
+          required: ['message'],
+          additionalProperties: false
+        }
+      }
+    }
+  ];
+  // Step 2: Create OpenAI client, during development will use a local model, in production it will use the OpenAI API
   const client = new OpenAI({
-    baseURL: process.env.NODE_ENV === 'development' ? process.env.LMS_BASE_URL! : undefined
+    baseURL: process.env.NODE_ENV === 'development' ? process.env.LOCAL_BASE_URL! : undefined,
+    apiKey:
+      process.env.NODE_ENV === 'development'
+        ? process.env.LOCAL_API_KEY
+        : process.env.OPENAI_API_KEY
   });
-  // Step 3: Set model, during development, we use a specific local model, otherwise we default to 'gpt-5'
-  const model = process.env.NODE_ENV === 'development' ? process.env.LMS_BASE_MODEL! : 'gpt-5';
+  // Step 3: Set model, during development, we use a specific local model, in production we use the OpenAI model
+  const model =
+    process.env.NODE_ENV === 'development'
+      ? process.env.LOCAL_MODEL_ID!
+      : process.env.OPENAI_MODEL_ID!;
   // Step 4: Create a running message list we will add to over time
   const messages: ChatCompletionMessageParam[] = [
     {
       role: 'developer',
-      content: `You are a strict weather assistant. Only respond to messages about weather. If the user asks about the weather in a city, call the "get_weather" tool. Use the "remark" field in the output for any tips or insight based on the conditions and temperature For anything else, do not call any tool and reply with "I can only provide weather information."`
+      content: `You are a strict weather assistant.
+      • If the user asks for the weather in a city, CALL the "get_weather" tool
+      with the city's name.
+      • Otherwise CALL the "return_error" tool with a short message like "Sorry, I can only answer weather questions."
+      Respond ONLY by calling one of those two tools.`
     },
     {
       role: 'user',
@@ -77,10 +98,12 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
     console.log(
       `\x1b[35mFunction ${functionName} will be called with: ${JSON.stringify(functionArgs)}\x1b[0m`
     );
-    let result: Weather | undefined;
+    let result: Weather | WeatherResponseDTO | undefined;
     // Step 9: Call your local function
     if (functionName === 'get_weather') {
       result = await getWeather(functionArgs);
+    } else if (functionName === 'return_error') {
+      result = await returnError(functionArgs);
     }
     // Step 10: Send function result back to message list
     messages.push({

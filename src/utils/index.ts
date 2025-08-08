@@ -1,10 +1,6 @@
-import { z } from 'zod';
-import { weatherSchema } from '#schemas';
-
-type Weather = z.infer<typeof weatherSchema>;
+import type { Weather, WeatherResponseDTO } from '#types';
 
 // Local functions for AI agent operations
-
 export const getWeather = async ({ city }: { city: string }): Promise<Weather> => {
   console.log(`\x1b[35mFunction get_weather called with: ${city}\x1b[0m`);
   const conditions = ['sunny', 'cloudy', 'rainy', 'snowy', 'windy', 'stormy'] as const;
@@ -15,3 +11,9 @@ export const getWeather = async ({ city }: { city: string }): Promise<Weather> =
   console.log(`\x1b[35mFunction get_weather returning: ${JSON.stringify(response)}\x1b[0m`);
   return response;
 };
+
+export const returnError = async ({
+  message
+}: {
+  message: string;
+}): Promise<WeatherResponseDTO> => ({ success: false, weatherData: null, error: message });

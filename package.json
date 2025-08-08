@@ -33,10 +33,10 @@
     "start": "node --env-file=.env.production.local dist/app.js"
   },
   "dependencies": {
+    "@openai/agents": "^0.0.15",
     "express": "^5.1.0",
     "mongoose": "^8.16.5",
-    "openai": "^5.12.1",
-    "zod": "^3.25.76"
+    "openai": "^5.12.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
