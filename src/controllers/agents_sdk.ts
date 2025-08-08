@@ -31,7 +31,7 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
     parameters: z.object({ message: z.string() }),
     execute: returnError
   });
-  // Step 2: Create OpenAI client, during development we use LM Studio's base URL
+  // Step 2: Create OpenAI client, during development will use a local model, in production it will use the OpenAI API
   const client = new OpenAI({
     baseURL: process.env.NODE_ENV === 'development' ? process.env.LOCAL_BASE_URL! : undefined,
     apiKey:
@@ -40,11 +40,12 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
         : process.env.OPENAI_API_KEY
   });
   setDefaultOpenAIClient(client);
-  // Step 3: Set model, during development, we use a specific local model, otherwise we default to 'gpt-5'
+  // Step 3: Set model, during development, we use a specific local model, in production we use the OpenAI model
   const model =
     process.env.NODE_ENV === 'development'
       ? new OpenAIChatCompletionsModel(client, process.env.LOCAL_MODEL_ID!)
       : process.env.OPENAI_MODEL_ID!;
+  // Step 4: Create an agent with the defined tools and instructions
   const agent = new Agent({
     name: 'Weather Assistant',
     instructions: `You are a strict weather assistant.
@@ -61,6 +62,7 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
       toolChoice: 'required'
     }
   });
+  // Step 5: Run the agent with the provided prompt
   const result = await run(agent, prompt);
   res.json(result.finalOutput);
 };
