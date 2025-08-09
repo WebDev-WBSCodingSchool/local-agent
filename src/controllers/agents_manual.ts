@@ -2,7 +2,7 @@ import type { Weather, WeatherInputDTO, WeatherResponseDTO } from '#types';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources';
 import { type RequestHandler } from 'express';
 import OpenAI from 'openai';
-import { zodTextFormat } from 'openai/helpers/zod';
+import { zodResponseFormat } from 'openai/helpers/zod';
 import { weatherResponseSchema } from '#schemas';
 import { getWeather, returnError } from '#utils';
 
@@ -120,23 +120,29 @@ export const getCurrentWeather: RequestHandler<{}, WeatherResponseDTO, WeatherIn
     });
     return;
   }
+
   // Step 11: Finalize the response with the model
-  const finalCompletion = await client.chat.completions.create({
-    model,
-    messages,
-    response_format: {
-      type: 'json_schema',
-      json_schema: zodTextFormat(weatherResponseSchema, 'WeatherResponse')
+  try {
+    const finalCompletion = await client.chat.completions.parse({
+      model,
+      messages,
+      response_format: zodResponseFormat(weatherResponseSchema, 'WeatherResponse')
+    });
+    console.log(
+      `\x1b[34mSecond call to put final response together used model: ${finalCompletion.model}\x1b[0m`
+    );
+    const finalAssistantMessage = finalCompletion.choices[0]?.message.parsed;
+    if (!finalAssistantMessage) {
+      res.status(500).json({ success: false, weatherData: null, error: 'Something went wrong' });
+      return;
     }
-  });
-  console.log(
-    `\x1b[34mSecond call to put final response together used model: ${finalCompletion.model}\x1b[0m`
-  );
-  const finalAssistantMessage = finalCompletion.choices[0]?.message;
-  if (!finalAssistantMessage) {
-    res.status(500).json({ success: false, weatherData: null, error: 'Something went wrong' });
-    return;
+    res.json(finalAssistantMessage);
+  } catch (error) {
+    console.error(`\x1b[31mError during final response parsing: ${error}\x1b[0m`);
+    res.status(500).json({
+      success: false,
+      weatherData: null,
+      error: 'Ooops, something went wrong while putting the final response together'
+    });
   }
-  const finalResponse = JSON.parse(finalAssistantMessage.content || '{}');
-  res.json(finalResponse);
 };
